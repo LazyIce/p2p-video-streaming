@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-106860120-1"></script>
+    <script>window.dataLayer = window.dataLayer||[];function gtag(){dataLayer.push(arguments)};gtag('js',new Date());gtag('config','UA-106860120-1');</script>
+
+    <title>P2P Video Streaming</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <script src="lib/p2p-graph.js"></script>
+    <script src="p2p-media-loader-core.js"></script>
+    <script src="lib/p2p-media-loader-shaka.js"></script>
+
+    <link type="text/css" rel="stylesheet" href="css/rickshaw.css">
+    <script src="lib/d3.min.js"></script>
+    <script src="lib/rickshaw.js"></script>
+
+    <!-- HlsJs -->
+    <script src="lib/hls.min.js"></script>
+
+    <!-- ShakaPlayer -->
+    <script src="lib/mux.js"></script>
+    <script src="lib/shaka-player.min.js"></script>
+
+    <link href="css/main.css" rel="stylesheet">
+
+</head>
+<body class="container">
+
+<div id="main-view" class="row">
+    <div class="col-md-12 header">
+        <h1 class="text-center">P2P Video Player</h1>
+        <form id="videoUrlForm">
+            <div class="form-group">
+                <input type="text" class="form-control" id="url" name="url" placeholder="Please enter video url" required
+                        value="https://wowza.peer5.com/live/smil:bbb_abr.smil/playlist.m3u8" />
+            </div>
+            <button type="submit" class="btn btn-primary" onclick="this.form.target=''">Apply</button>
+            <button type="submit" class="btn btn-primary" onclick="this.form.target='_blank'">Create new peer</button>
+        </form>
+        <hr>
+    </div>
+    <div id="error-webrtc-data-channels" class="col-md-12 hide">
+        WebRTC Data Channels API is not supported by your browser. P2P disabled.<br>
+        Read more at <a href="http://iswebrtcreadyyet.com/legacy.html" target="_blank">Is WebRTC ready yet?</a>.
+        <hr>
+    </div>
+    <div id="error-shakaplayer" class="col-md-12 hide">
+        Your browser doesn't support Shaka Player.<br>
+        Read more at <a href="https://shaka-player-demo.appspot.com/docs/api/shaka.Player.html#.isBrowserSupported" target="_blank">shaka.Player.isBrowserSupported</a>.
+        <hr>
+    </div>
+    <div class="col-md-12">
+        <div class="col-md-8">
+            <div id="video_container" class="text-center"></div>
+        </div>
+        <div class="col-md-4">
+            <div id="graph"></div>
+        </div>
+    </div>
+    <div class="col-md-12">
+        <div class="col-md-8" id="chart_container">
+            <div id="y_axis"></div>
+            <div id="chart"></div>
+        </div>
+        <div class="col-md-4" id = "legend_container">
+            <div id="legend"></div>
+            <div id="legend-totals"></div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+
+    var DemoApp = (function () {
+
+        var P2PGraphClass = require("p2p-graph");
+
+        function DemoApp() {
+            if (!Hls.isSupported()) {
+                document.querySelector("#error-hls-js").classList.remove("hide");
+            }
+
+            if (!p2pml.core.HybridLoader.isSupported()) {
+                document.querySelector("#error-webrtc-data-channels").classList.remove("hide");
+            }
+
+            if (location.protocol == "https:") {
+                document.querySelector("#https-only").classList.remove("hide");
+            }
+
+            this.initForm();
+
+            var videoUrlForm = document.getElementById("videoUrlForm");
+            this.videoUrl = videoUrlForm.url.value.trim();
+            this.playerType = 'shakaplayer';
+            this.videoContainer = document.getElementById("video_container");
+
+            this.loadSpeedTimespan = 10; // seconds
+
+            this.graph = new P2PGraphClass("#graph");
+            this.graph.add({ id: "me", name: "You", me: true });
+            this.initChart();
+            this.restartDemo();
+        }
+
+        DemoApp.prototype.initForm = function () {
+            var form = document.getElementById("videoUrlForm");
+            window.location.search.substr(1).split("&").forEach((e) => {
+                var p = e.split("=");
+                if (p.length === 2) {
+                    var name = p[0];
+                    var value = window.decodeURIComponent(p[1]);
+                    switch (name) {
+                        case "url":
+                            form.url.value = value;
+                            break;
+                        case "type":
+                            form.type.value = value;
+                            break;
+                        case "swarm":
+                            this.swarmId = value;
+                            break;
+                    }
+                }
+            });
+        };
+
+        DemoApp.prototype.restartDemo = function () {
+            this.downloadStats = [];
+            this.downloadTotals = { http: 0, p2p: 0 };
+            this.uploadStats = [];
+            this.uploadTotal = 0;
+
+            while (this.videoContainer.hasChildNodes()) {
+                this.videoContainer.removeChild(this.videoContainer.lastChild);
+            }
+
+            const config = {
+                segments: {
+                    swarmId: this.swarmId
+                }
+            };
+
+            this.engine = new p2pml.shaka.Engine(config);
+            this.initShakaPlayer();
+
+            this.engine.on(p2pml.core.Events.PieceBytesDownloaded, this.onBytesDownloaded.bind(this));
+            this.engine.on(p2pml.core.Events.PieceBytesUploaded, this.onBytesUploaded.bind(this));
+
+            this.refreshChart();
+            this.refreshGraph();
+        };
+
+        DemoApp.prototype.initShakaPlayer = function () {
+            shaka.polyfill.installAll();
+            if (shaka.Player.isBrowserSupported()) {
+                var video = document.createElement("video");
+                video.id = "video";
+                video.volume = 0;
+                video.setAttribute("autoplay", "autoplay");
+                video.setAttribute("controls", "controls");
+                this.videoContainer.appendChild(video);
+
+                var level = document.createElement("select");
+                level.id = "level";
+                level.classList.add("form-control");
+                this.videoContainer.appendChild(level);
+
+                var player = new shaka.Player(video);
+                this.engine.initShakaPlayer(player);
+                this.shakaLevelSwitcher.init(player, level);
+                player.load(this.videoUrl);
+            } else {
+                document.querySelector("#error-shakaplayer").classList.remove("hide");
+            }
+        };
+
+        DemoApp.prototype.initChart = function (event) {
+            var chartConf = {
+                element: document.querySelector("#chart"),
+                renderer: 'multi',
+                interpolation: "basis",
+                stack: false,
+                min: 'auto',
+                strokeWidth: 1,
+                series: [
+                    {name: "Upload P2P", color: "#88eab9", data: [], renderer: 'area'},
+                    {name: " - P2P", color: "#88b9ea", data: [], renderer: 'area'},
+                    {name: " - HTTP", color: "#eae288", data: [], renderer: 'area'},
+                    {name: "Download", color: "#f64", data: [], renderer: 'line'}
+                ]
+            };
+
+            this.chart = new Rickshaw.Graph(chartConf);
+
+            new Rickshaw.Graph.Axis.X({
+                graph: this.chart,
+                tickFormat: function() { return ''; }
+            });
+
+            new Rickshaw.Graph.Axis.Y({
+                graph: this.chart,
+                orientation: 'left',
+                element: document.getElementById('y_axis')
+            });
+
+            this.legend = new Rickshaw.Graph.Legend({
+                graph: this.chart,
+                element: document.getElementById('legend')
+            });
+
+            this.legendTotals = new Rickshaw.Graph.Legend({
+                graph: this.chart,
+                element: document.getElementById("legend-totals")
+            });
+
+            this.chart.render();
+            setInterval(this.updateChartData.bind(this), 500);
+
+            var chartResize = function () {
+                chartConf.width = this.chart.element.clientWidth;
+                this.chart.configure(chartConf);
+                this.chart.render();
+            }.bind(this);
+
+            chartResize();
+            window.addEventListener("resize", chartResize);
+        };
+
+        DemoApp.prototype.refreshChart = function () {
+            if (!this.chart) {
+                return;
+            }
+
+            var data0 = this.chart.series[0].data;
+            var data1 = this.chart.series[1].data;
+            var data2 = this.chart.series[2].data;
+            var data3 = this.chart.series[3].data;
+            var lastX = data0.length > 0 ? data0[data0.length - 1].x : -1;
+
+            var seriesDataMapper = function(currentValue, index) {
+                return {x: index + lastX + 1, y: 0};
+            };
+
+            data0.length = 0;
+            data1.length = 0;
+            data2.length = 0;
+            data3.length = 0;
+
+            var stubData = Array.apply(null, Array(200)).map(seriesDataMapper);
+            data0.push.apply(data0, stubData.slice(0));
+            data1.push.apply(data1, stubData.slice(0));
+            data2.push.apply(data2, stubData.slice(0));
+            data3.push.apply(data3, stubData.slice(0));
+
+            this.chart.update();
+        };
+
+        DemoApp.prototype.updateChartData = function () {
+            var downloadSpeed = this.getDownloadSpeed();
+            var http = Number((downloadSpeed.http * 8 / 1000000).toFixed(2));
+            var p2p = Number((downloadSpeed.p2p * 8 / 1000000).toFixed(2));
+            var total = Number((http + p2p).toFixed(2));
+            var upload = Number(this.getUploadSpeed() * 8 / 1000000).toFixed(2);
+
+            var data0 = this.chart.series[0].data;
+            var data1 = this.chart.series[1].data;
+            var data2 = this.chart.series[2].data;
+            var data3 = this.chart.series[3].data;
+            var x = data0.length > 0 ? data0[data0.length - 1].x + 1 : 0;
+
+            data0.shift();
+            data1.shift();
+            data2.shift();
+            data3.shift();
+            data0.push({x: x, y: -upload});
+            data1.push({x: x, y: total});
+            data2.push({x: x, y: http});
+            data3.push({x: x, y: total});
+            this.chart.update();
+
+            this.formatChartLegendLine(0, total);
+            this.formatChartLegendLine(1, http);
+            this.formatChartLegendLine(2, p2p);
+            this.formatChartLegendLine(3, upload);
+
+            this.updateLegendTotals();
+        };
+
+        DemoApp.prototype.formatChartLegendLine = function (index, speed) {
+            if (this.legend) {
+                var line = this.legend.lines[index];
+                line.element.childNodes[1].textContent = line.series.name + ' - ' + speed + ' Mbit/s';
+            }
+        };
+
+        DemoApp.prototype.updateLegendTotals = function () {
+            if (!this.legendTotals) {
+                return;
+            }
+
+            var httpMb = this.downloadTotals.http / 1048576;
+            var p2pMb = this.downloadTotals.p2p / 1048576;
+            var totalMb = httpMb + p2pMb;
+            var uploadMb = this.uploadTotal / 1048576;
+
+            if (totalMb != 0) {
+                this.legendTotals.lines[0].element.childNodes[1].textContent
+                    = "Download - "
+                    + Number(totalMb).toFixed(1) + " MiB";
+
+                this.legendTotals.lines[1].element.childNodes[1].textContent
+                    = " - HTTP - "
+                    + Number(httpMb).toFixed(1) + " MiB - "
+                    + Number((httpMb * 100) / totalMb).toFixed(0) + "%";
+
+                this.legendTotals.lines[2].element.childNodes[1].textContent
+                    = " - P2P - "
+                    + Number(p2pMb).toFixed(1) + " MiB - "
+                    + Number((p2pMb * 100) / totalMb).toFixed(0) + "%";
+
+                this.legendTotals.lines[3].element.childNodes[1].textContent
+                    = "Upload P2P - "
+                    + Number(uploadMb).toFixed(1) + " MiB";
+            }
+        };
+
+        DemoApp.prototype.getDownloadSpeed = function () {
+            var startingPoint = performance.now() - (this.loadSpeedTimespan * 1000);
+            var httpSize = 0;
+            var p2pSize = 0;
+
+            var i = this.downloadStats.length;
+            while (i--) {
+                var stat = this.downloadStats[i];
+                if (stat.timestamp < startingPoint) {
+                    break;
+                }
+
+                if (stat.method === "p2p") {
+                    p2pSize += stat.size;
+                } else if (stat.method === "http") {
+                    httpSize += stat.size;
+                }
+            }
+
+            this.downloadStats.splice(0, i + 1);
+
+            return {p2p: p2pSize / this.loadSpeedTimespan, http: httpSize / this.loadSpeedTimespan};
+        };
+
+        DemoApp.prototype.getUploadSpeed = function () {
+            var startingPoint = performance.now() - (this.loadSpeedTimespan * 1000);
+            var size = 0;
+
+            var i = this.uploadStats.length;
+            while (i--) {
+                var stat = this.uploadStats[i];
+                if (stat.timestamp < startingPoint) {
+                    break;
+                }
+
+                size += stat.size;
+            }
+
+            this.uploadStats.splice(0, i + 1);
+
+            return size / this.loadSpeedTimespan;
+        };
+
+        DemoApp.prototype.onBytesDownloaded = function (method, size) {
+            this.downloadStats.push({method: method, size: size, timestamp: performance.now()});
+            this.downloadTotals[method] += size;
+        };
+
+        DemoApp.prototype.onBytesUploaded = function (method, size) {
+            this.uploadStats.push({size: size, timestamp: performance.now()});
+            this.uploadTotal += size;
+        };
+
+        DemoApp.prototype.refreshGraph = function (p2pLoader) {
+            if (!this.graph) {
+                return;
+            }
+
+            var nodes = this.graph.list();
+            for (var i = 0; i < nodes.length; i++) {
+                if (nodes[i].id !== "me") {
+                    this.graph.disconnect("me", nodes[i].id);
+                    this.graph.remove(nodes[i].id);
+                }
+            }
+
+            this.engine.on(p2pml.core.Events.PeerConnect, this.onPeerConnect.bind(this));
+            this.engine.on(p2pml.core.Events.PeerClose, this.onPeerClose.bind(this));
+        };
+
+        DemoApp.prototype.onPeerConnect = function (peer) {
+            if (!this.graph.hasPeer(peer.id)) {
+                this.graph.add({id: peer.id, name: peer.remoteAddress || 'Unknown'});
+                this.graph.connect("me", peer.id);
+            }
+        };
+
+        DemoApp.prototype.onPeerClose = function (id) {
+            if (this.graph.hasPeer(id)) {
+                this.graph.disconnect("me", id);
+                this.graph.remove(id);
+            }
+        };
+
+        DemoApp.prototype.shakaLevelSwitcher = {
+
+            auto: "Auto",
+            player: undefined,
+            select: undefined,
+
+            init: function (player, select) {
+                this.player = player;
+                this.select = select;
+
+                player.addEventListener("trackschanged", () => {
+                    this._clearOptions();
+                    this._addOption(this.auto);
+                    this.player.getVariantTracks().forEach((e, i) => {
+                        var name = [];
+
+                        if (e.height) {
+                            name.push(e.height + "p");
+                        }
+
+                        if (e.bandwidth) {
+                            name.push(Math.round(e.bandwidth / 1000) + "k");
+                        }
+
+                        if (e.label) {
+                            name.push(e.label);
+                        } else if (e.language) {
+                            name.push(e.language);
+                        }
+
+                        if (name.length === 0) {
+                            name.push("Variant #" + i);
+                        }
+
+                        this._addOption(name.join(" / "), e.id);
+                    });
+                });
+
+                player.addEventListener("adaptation", () => {
+                    var variantId = this.player.getVariantTracks().find(i => i.active === true).id;
+                    var curr = this.select.querySelector("option[data-variant-id='" + variantId + "']");
+                    var auto = this.select.querySelector("option:not([data-variant-id])");
+                    auto.text = curr ? curr.text + " (" + this.auto + ")" : this.auto;
+                });
+
+                select.addEventListener("change", () => {
+                    var variantId = this.select.selectedOptions[ 0 ].dataset.variantId;
+                    if (variantId) {
+                        var variant = this.player.getVariantTracks().find(i => i.id == variantId);
+                        this.player.configure({ abr: { enabled: false } });
+                        this.player.selectVariantTrack(variant);
+                        var auto = this.select.querySelector("option:not([data-variant-id])");
+                        auto.text = this.auto;
+                    } else {
+                        this.player.configure({ abr: { enabled: true } });
+                    }
+                });
+            },
+
+            _clearOptions: function () {
+                while (this.select.options.length) {
+                    this.select.remove(0);
+                }
+            },
+
+            _addOption: function (text, variantId) {
+                var option = document.createElement("option");
+                option.text = text;
+                if (variantId) {
+                    option.dataset.variantId = variantId;
+                }
+                this.select.add(option);
+            }
+
+        }; // end of shakaLevelSwitcher
+
+        return DemoApp;
+    }());
+
+    var demo = new DemoApp();
+
+</script>
+
+</body>
+</html>

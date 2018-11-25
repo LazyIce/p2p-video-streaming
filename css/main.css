@@ -1,0 +1,58 @@
+body {
+    margin-top: 1em;
+    margin-bottom: 3em;
+}
+#video {
+    width: 100%;
+}
+#level {
+    width: auto;
+    float: right;
+}
+#graph {
+    max-width: 100%;
+    overflow: hidden;
+    margin: 0 auto 3em auto;
+    border: 1px solid #eee;
+}
+#chart_container {
+    position: relative;
+    margin: 3em auto;
+    max-width: 100%;
+}
+#legend_container {
+    position: relative;
+    margin: 3em auto;
+    max-width: 100%;
+    text-align: center;
+}
+#y_axis {
+    position: absolute;
+    top: 0;
+    width: 40px;
+    left: -20px;
+}
+#y_axis > svg {
+    overflow: visible;
+}
+#legend {
+    margin-top: 1em;
+    margin-bottom: 1.5em;
+}
+#legend-totals {
+    margin-top: 1.5em;
+    margin-bottom: 1em;
+}
+#main-view.hide {
+    display: none;
+}
+.header {
+    text-align: center;
+}
+#url {
+    width: 40%;
+    margin: 0 auto;
+}
+.line {
+    text-align: left;
+}
