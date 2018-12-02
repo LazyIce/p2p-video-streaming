@@ -1,6 +1,8 @@
 body {
     margin-top: 1em;
     margin-bottom: 3em;
+    background: #262932;
+    font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
 }
 #video {
     width: 100%;
@@ -14,7 +16,14 @@ body {
     overflow: hidden;
     margin: 0 auto 3em auto;
     border: 1px solid #eee;
+    opacity: 0.7;
 }
+
+#graph .node .text {
+    color: #eee;
+    fill: #eee;
+}
+
 #chart_container {
     position: relative;
     margin: 3em auto;
@@ -55,4 +64,9 @@ body {
 }
 .line {
     text-align: left;
+    color: #eee;
+}
+
+.text-center {
+    color: #eee;
 }

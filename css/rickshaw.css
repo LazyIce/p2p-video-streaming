@@ -44,7 +44,7 @@
     opacity: .5;
     border: 1px solid #e0e0e0;
     position: absolute;
-    background: #fff
+    background: #fff;
 }
 
 .rickshaw_graph .detail .item {
@@ -126,21 +126,24 @@
     bottom: 0;
     width: 0;
     border-left: 1px dotted rgba(0, 0, 0, .2);
-    pointer-events: none
+    pointer-events: none;
+    fill: #fff;
 }
 
 .rickshaw_graph .x_tick .title {
     position: absolute;
     opacity: .5;
     margin-left: 3px;
-    bottom: 1px
+    bottom: 1px;
+    fill: #fff;
 }
 
 .rickshaw_annotation_timeline {
     height: 1px;
     border-top: 1px solid #e0e0e0;
     margin-top: 10px;
-    position: relative
+    position: relative;
+    fill: #fff;
 }
 
 .rickshaw_annotation_timeline .annotation {
@@ -150,7 +153,8 @@
     margin-left: -2px;
     top: -3px;
     border-radius: 5px;
-    background-color: rgba(0, 0, 0, .25)
+    background-color: rgba(0, 0, 0, .25);
+    fill: #fff;
 }
 
 .rickshaw_graph .annotation_line {
@@ -159,7 +163,8 @@
     bottom: -6px;
     width: 0;
     border-left: 2px solid rgba(0, 0, 0, .3);
-    display: none
+    display: none;
+    fill: #fff;
 }
 
 .rickshaw_graph .annotation_line.active {
@@ -228,12 +233,12 @@
 
 .rickshaw_graph .x_axis_d3,
 .rickshaw_graph .y_axis {
-    fill: none
+    stroke: #fff;
 }
 
 .rickshaw_graph .x_ticks_d3 .tick,
 .rickshaw_graph .y_ticks .tick line {
-    stroke: rgba(0, 0, 0, .16);
+    stroke: rgba(255, 255, 255, .16);
     stroke-width: 2px;
     shape-rendering: crisp-edges;
     pointer-events: none
@@ -242,7 +247,7 @@
 .rickshaw_graph .x_grid_d3 .tick,
 .rickshaw_graph .y_grid .tick {
     z-index: -1;
-    stroke: rgba(0, 0, 0, .2);
+    stroke: rgba(255, 255, 255, .8);
     stroke-width: 1px;
     stroke-dasharray: 1 1
 }
@@ -267,13 +272,15 @@
 .rickshaw_graph .y_ticks text {
     opacity: .5;
     font-size: 12px;
-    pointer-events: none
+    pointer-events: none;
+    fill: #eee;
+    color: #eee;
 }
 
 .rickshaw_graph .x_tick.glow .title,
 .rickshaw_graph .y_ticks.glow text {
-    fill: #000;
-    color: #000;
+    fill: #eee;
+    color: #eee;
     text-shadow: -1px 1px 0 rgba(255, 255, 255, .1), 1px -1px 0 rgba(255, 255, 255, .1), 1px 1px 0 rgba(255, 255, 255, .1), 0 1px 0 rgba(255, 255, 255, .1), 0 -1px 0 rgba(255, 255, 255, .1), 1px 0 0 rgba(255, 255, 255, .1), -1px 0 0 rgba(255, 255, 255, .1), -1px -1px 0 rgba(255, 255, 255, .1)
 }
 
