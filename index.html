@@ -13,7 +13,7 @@
 
     <script src="lib/p2p-graph.js"></script>
     <script src="p2p-media-loader-core.js"></script>
-    <script src="lib/p2p-media-loader-shaka.js"></script>
+    <script src="lib/p2p-media-loader-hlsjs.min.js"></script>
 
     <link type="text/css" rel="stylesheet" href="css/rickshaw.css">
     <script src="lib/d3.min.js"></script>
@@ -22,9 +22,9 @@
     <!-- HlsJs -->
     <script src="lib/hls.min.js"></script>
 
-    <!-- ShakaPlayer -->
-    <script src="lib/mux.js"></script>
-    <script src="lib/shaka-player.min.js"></script>
+    <!-- Clappr -->
+    <script src="lib/clappr.min.js"></script>
+    <script src="lib/select-level.min.js"></script>
 
     <link href="css/main.css" rel="stylesheet">
 
@@ -37,7 +37,7 @@
         <form id="videoUrlForm">
             <div class="form-group">
                 <input type="text" class="form-control" id="url" name="url" placeholder="Please enter video url" required
-                        value="https://wowza.peer5.com/live/smil:bbb_abr.smil/playlist.m3u8" />
+                        value="https://s3.amazonaws.com/6250resource/slice/playlist.m3u8" />
             </div>
             <button type="submit" class="btn btn-primary" onclick="this.form.target=''">Apply</button>
             <button type="submit" class="btn btn-primary" onclick="this.form.target='_blank'">Start new peer</button>
@@ -47,11 +47,6 @@
     <div id="error-webrtc-data-channels" class="col-md-12 hide">
         WebRTC Data Channels API is not supported by your browser. P2P disabled.<br>
         Read more at <a href="http://iswebrtcreadyyet.com/legacy.html" target="_blank">Is WebRTC ready yet?</a>.
-        <hr>
-    </div>
-    <div id="error-shakaplayer" class="col-md-12 hide">
-        Your browser doesn't support Shaka Player.<br>
-        Read more at <a href="https://shaka-player-demo.appspot.com/docs/api/shaka.Player.html#.isBrowserSupported" target="_blank">shaka.Player.isBrowserSupported</a>.
         <hr>
     </div>
     <div class="col-md-12">
@@ -98,7 +93,7 @@
 
             var videoUrlForm = document.getElementById("videoUrlForm");
             this.videoUrl = videoUrlForm.url.value.trim();
-            this.playerType = 'shakaplayer';
+            this.playerType = 'clappr';
             this.videoContainer = document.getElementById("video_container");
 
             this.loadSpeedTimespan = 10; // seconds
@@ -147,8 +142,8 @@
                 }
             };
 
-            this.engine = new p2pml.shaka.Engine(config);
-            this.initShakaPlayer();
+            this.engine = new p2pml.hlsjs.Engine(config);
+            this.initClapprPlayer();
 
             this.engine.on(p2pml.core.Events.PieceBytesDownloaded, this.onBytesDownloaded.bind(this));
             this.engine.on(p2pml.core.Events.PieceBytesUploaded, this.onBytesUploaded.bind(this));
@@ -157,28 +152,36 @@
             this.refreshGraph();
         };
 
-        DemoApp.prototype.initShakaPlayer = function () {
-            shaka.polyfill.installAll();
-            if (shaka.Player.isBrowserSupported()) {
-                var video = document.createElement("video");
-                video.id = "video";
-                video.volume = 0;
-                video.setAttribute("autoplay", "autoplay");
-                video.setAttribute("controls", "controls");
-                this.videoContainer.appendChild(video);
+        DemoApp.prototype.initClapprPlayer = function () {
+            var outer = document.createElement("div");
+            outer.className = "embed-responsive embed-responsive-16by9";
+            var video = document.createElement("div");
+            video.id = "video";
+            video.className = "embed-responsive-item";
+            outer.appendChild(video);
+            this.videoContainer.appendChild(outer);
 
-                var level = document.createElement("select");
-                level.id = "level";
-                level.classList.add("form-control");
-                this.videoContainer.appendChild(level);
+            var setup = {
+                parentId: "#video",
+                plugins: [LevelSelector],
+                source: this.videoUrl,
+                width: "100%",
+                height: "100%",
+                muted: true,
+                mute: true,
+                autoPlay: true
+            };
 
-                var player = new shaka.Player(video);
-                this.engine.initShakaPlayer(player);
-                this.shakaLevelSwitcher.init(player, level);
-                player.load(this.videoUrl);
-            } else {
-                document.querySelector("#error-shakaplayer").classList.remove("hide");
-            }
+            setup.playback = {
+                hlsjsConfig: {
+                    liveSyncDurationCount: this.liveSyncDurationCount,
+                    loader: this.engine.createLoaderClass()
+                }
+            };
+
+            var player = new Clappr.Player(setup);
+
+            p2pml.hlsjs.initClapprPlayer(player);
         };
 
         DemoApp.prototype.initChart = function (event) {
